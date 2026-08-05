@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>AI-IDS Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0b0f14; --panel: #121821; --border: #232c38; --text: #e6edf3;
+    --muted: #8b98a5; --accent: #3fb950; --danger: #f85149; --warn: #d29922; --blue: #58a6ff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, Segoe UI, Roboto, sans-serif; }
+  #login-screen { display: flex; align-items: center; justify-content: center; height: 100vh; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 24px; }
+  .login-card { width: 320px; }
+  .login-card h1 { font-size: 20px; margin: 0 0 4px; }
+  .login-card p { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
+  input, select { width: 100%; padding: 10px; margin-bottom: 12px; background: #0d1218; border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; }
+  button { padding: 10px; background: var(--blue); border: none; border-radius: 6px; color: #06121f; font-weight: 600; cursor: pointer; font-size: 13px; }
+  button:hover { opacity: 0.9; }
+  button.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  button.danger-outline { background: transparent; border: 1px solid var(--danger); color: var(--danger); padding: 4px 10px; font-size: 11px; }
+  #error-msg { color: var(--danger); font-size: 13px; margin-bottom: 8px; min-height: 16px; }
+  #app { display: none; padding: 20px; max-width: 1300px; margin: 0 auto; }
+  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+  header h1 { font-size: 18px; margin: 0; display: flex; align-items: center; gap: 8px; }
+  .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); display: inline-block; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  header .user { color: var(--muted); font-size: 13px; }
+  .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 20px; }
+  .stat-card { padding: 16px; }
+  .stat-card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .stat-card .value { font-size: 28px; font-weight: 700; margin-top: 6px; }
+  .stat-card.critical .value { color: var(--danger); }
+  .panels { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+  .panel h2 { font-size: 13px; margin: 0 0 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; display: flex; justify-content: space-between; align-items: center; }
+  .panel .chart-error { color: var(--muted); font-size: 12px; text-align: center; padding: 40px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--muted); font-weight: 500; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td { padding: 6px 8px; border-bottom: 1px solid #1a212b; }
+  .badge { padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+  .badge.low { background: #1f6feb22; color: var(--blue); }
+  .badge.medium { background: #d2992222; color: var(--warn); }
+  .badge.high { background: #f8514922; color: var(--danger); }
+  .badge.critical { background: #f85149; color: #fff; }
+  .badge.normal { background: #3fb95022; color: var(--accent); }
+  .toolbar { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+  .toolbar input, .toolbar select { width: auto; margin-bottom: 0; padding: 8px 10px; }
+  .toolbar button { width: auto; }
+  .empty { color: var(--muted); font-size: 13px; padding: 20px 0; text-align: center; }
+  .conf-bar { display: inline-block; width: 50px; height: 6px; background: #1a212b; border-radius: 3px; overflow: hidden; vertical-align: middle; margin-right: 6px; }
+  .conf-bar-fill { height: 100%; background: var(--blue); }
+  .panel-list { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+  .panel-list li { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid #1a212b; }
+  .panel-list .count { color: var(--danger); font-weight: 700; }
+  .toast-area { position: fixed; top: 16px; right: 16px; z-index: 999; display: flex; flex-direction: column; gap: 8px; }
+  .toast { background: #f8514922; border: 1px solid var(--danger); color: var(--danger); padding: 10px 14px; border-radius: 8px; font-size: 12px; max-width: 320px; }
+  .auto-refresh-toggle { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+  .table-panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+</style>
+</head>
+<body>
+
+<div class="toast-area" id="toast-area"></div>
+
+<div id="login-screen">
+  <div class="card login-card">
+    <h1>AI-IDS</h1>
+    <p>AI-Powered Intrusion Detection System</p>
+    <div id="error-msg"></div>
+    <input id="username" placeholder="Username" autocomplete="username" value="admin" />
+    <input id="password" type="password" placeholder="Password" autocomplete="current-password" value="Admin@12345" />
+    <button style="width:100%" onclick="login()">Sign in</button>
+    <button class="secondary" style="width:100%; margin-top:8px;" onclick="register()">Create account</button>
+  </div>
+</div>
+
+<div id="app">
+  <header>
+    <h1><span class="live-dot"></span> AI-IDS Dashboard</h1>
+    <div style="display:flex; align-items:center; gap:16px;">
+      <label class="auto-refresh-toggle">
+        <input type="checkbox" id="auto-refresh" checked style="width:auto; margin:0;" onchange="toggleAutoRefresh()" />
+        Auto-refresh (5s)
+      </label>
+      <div class="user"><span id="who"></span> · <a href="#" onclick="logout()" style="color:var(--muted)">log out</a></div>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <button onclick="simulateTraffic()">Simulate traffic (20 flows)</button>
+    <button class="secondary" onclick="refreshAll()">Refresh now</button>
+    <button id="live-toggle-btn" onclick="toggleLiveFeed()">▶ Start live feed</button>
+    <span id="live-status" style="font-size:12px; color:var(--muted);"></span>
+  </div>
+
+  <div class="card panel" id="live-strip" style="margin-bottom:20px; display:none;">
+    <h2>Live — most recent prediction <span id="ws-dot" style="width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block;"></span></h2>
+    <div id="live-latest" style="font-size:13px; color:var(--muted);">Waiting for the first flow...</div>
+  </div>
+
+  <div class="grid">
+    <div class="card stat-card"><div class="label">Total Flows</div><div class="value" id="stat-flows">–</div></div>
+    <div class="card stat-card"><div class="label">Open Alerts</div><div class="value" id="stat-open">–</div></div>
+    <div class="card stat-card critical"><div class="label">Critical Alerts</div><div class="value" id="stat-critical">–</div></div>
+    <div class="card stat-card"><div class="label">Total Alerts</div><div class="value" id="stat-total">–</div></div>
+    <div class="card stat-card"><div class="label">Avg Prediction Time</div><div class="value" id="stat-latency">–</div></div>
+  </div>
+
+  <div class="card panel" style="margin-bottom:20px;">
+    <h2>Activity timeline (last 15 min) — normal vs malicious</h2>
+    <div id="timeline-error"></div>
+    <canvas id="timelineChart" height="70"></canvas>
+  </div>
+
+  <div class="panels">
+    <div class="card panel">
+      <h2>Attack type breakdown</h2>
+      <div id="labelChart-error"></div>
+      <canvas id="labelChart" height="180"></canvas>
+    </div>
+    <div class="card panel">
+      <h2>Protocol distribution</h2>
+      <div id="protoChart-error"></div>
+      <canvas id="protoChart" height="180"></canvas>
+    </div>
+    <div class="card panel">
+      <h2>Top attacker IPs</h2>
+      <ul class="panel-list" id="top-attackers"></ul>
+    </div>
+  </div>
+
+  <div class="card panel" style="margin-bottom:20px;">
+    <div class="table-panel-header">
+      <h2 style="margin:0;">Recent Alerts</h2>
+      <div class="toolbar" style="margin:0;">
+        <select id="alert-filter" onchange="loadAlerts()">
+          <option value="">All threat levels</option>
+          <option value="critical">Critical</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th>Time</th><th>Threat</th><th>Type</th><th>Source IP</th><th>Message</th><th></th></tr></thead>
+      <tbody id="alerts-body"></tbody>
+    </table>
+  </div>
+
+  <div class="card panel">
+    <div class="table-panel-header">
+      <h2 style="margin:0;">Recent Traffic Flows</h2>
+      <div class="toolbar" style="margin:0;">
+        <input id="traffic-search" placeholder="Search IP..." oninput="debouncedLoadTraffic()" />
+        <select id="traffic-filter" onchange="loadTraffic()">
+          <option value="">All labels</option>
+          <option value="normal">Normal</option>
+          <option value="dos">DoS</option>
+          <option value="ddos">DDoS</option>
+          <option value="port_scan">Port Scan</option>
+          <option value="brute_force">Brute Force</option>
+        </select>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th>Time</th><th>Source</th><th>Destination</th><th>Proto</th><th>Bytes</th><th>Label</th><th>Confidence</th></tr></thead>
+      <tbody id="traffic-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script>
+const API = window.API_BASE_URL;
+let TOKEN = localStorage.getItem("ai_ids_token") || null;
+let labelChart, protoChart, timelineChart;
+let autoRefreshTimer = null;
+let searchDebounce = null;
+let liveSocket = null;
+let liveEnabled = false;
+
+function authHeaders() { return { "Authorization": "Bearer " + TOKEN }; }
+
+function showToast(message) {
+  const area = document.getElementById("toast-area");
+  const el = document.createElement("div");
+  el.className = "toast";
+  el.textContent = message;
+  area.appendChild(el);
+  setTimeout(() => el.remove(), 6000);
+}
+
+async function apiGet(path) {
+  const res = await fetch(`${API}${path}`, { headers: authHeaders() });
+  if (res.status === 401) { logout(); throw new Error("Session expired"); }
+  if (!res.ok) throw new Error(`${path} failed (${res.status})`);
+  return res.json();
+}
+
+// ---------- Auth ----------
+
+async function login() {
+  const username = document.getElementById("username").value;
+  const password = document.getElementById("password").value;
+  const errBox = document.getElementById("error-msg");
+  errBox.textContent = "";
+  try {
+    const res = await fetch(`${API}/api/auth/login`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.detail || "Login failed"); }
+    const data = await res.json();
+    TOKEN = data.access_token;
+    localStorage.setItem("ai_ids_token", TOKEN);
+    localStorage.setItem("ai_ids_user", data.user.username);
+    showApp();
+  } catch (err) { errBox.textContent = err.message; }
+}
+
+async function register() {
+  const username = document.getElementById("username").value;
+  const password = document.getElementById("password").value;
+  const errBox = document.getElementById("error-msg");
+  errBox.textContent = "";
+  try {
+    const res = await fetch(`${API}/api/auth/register`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password, email: `${username}@example.com` }),
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.detail || "Registration failed"); }
+    const data = await res.json();
+    TOKEN = data.access_token;
+    localStorage.setItem("ai_ids_token", TOKEN);
+    localStorage.setItem("ai_ids_user", data.user.username);
+    showApp();
+  } catch (err) { errBox.textContent = err.message; }
+}
+
+function logout() {
+  localStorage.removeItem("ai_ids_token");
+  TOKEN = null;
+  if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+  disconnectLiveSocket();
+  liveEnabled = false;
+  document.getElementById("app").style.display = "none";
+  document.getElementById("login-screen").style.display = "flex";
+}
+
+function showApp() {
+  document.getElementById("login-screen").style.display = "none";
+  document.getElementById("app").style.display = "block";
+  document.getElementById("who").textContent = localStorage.getItem("ai_ids_user") || "user";
+  refreshAll();
+  toggleAutoRefresh();
+}
+
+function toggleAutoRefresh() {
+  if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
+  if (document.getElementById("auto-refresh").checked) {
+    autoRefreshTimer = setInterval(refreshAll, 5000);
+  }
+}
+
+// ---------- Actions ----------
+
+async function simulateTraffic() {
+  try {
+    await fetch(`${API}/api/simulate?count=20`, { method: "POST", headers: authHeaders() });
+    refreshAll();
+  } catch (err) { showToast("Simulate failed: " + err.message); }
+}
+
+async function resolveAlert(alertId) {
+  try {
+    await fetch(`${API}/api/alerts/${alertId}/resolve`, { method: "POST", headers: authHeaders() });
+    loadAlerts();
+    loadStats();
+  } catch (err) { showToast("Could not resolve alert: " + err.message); }
+}
+
+function debouncedLoadTraffic() {
+  clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(loadTraffic, 300);
+}
+
+// ---------- Live feed (WebSocket) ----------
+
+async function toggleLiveFeed() {
+  const btn = document.getElementById("live-toggle-btn");
+  if (!liveEnabled) {
+    try {
+      await fetch(`${API}/api/live/start?interval_seconds=2`, { method: "POST", headers: authHeaders() });
+      connectLiveSocket();
+      liveEnabled = true;
+      btn.textContent = "■ Stop live feed";
+      document.getElementById("live-strip").style.display = "block";
+      document.getElementById("live-status").textContent = "generating a new flow every 2s";
+    } catch (err) { showToast("Could not start live feed: " + err.message); }
+  } else {
+    try {
+      await fetch(`${API}/api/live/stop`, { method: "POST", headers: authHeaders() });
+    } catch (err) { /* stop anyway on the client side even if this fails */ }
+    disconnectLiveSocket();
+    liveEnabled = false;
+    btn.textContent = "▶ Start live feed";
+    document.getElementById("live-status").textContent = "";
+  }
+}
+
+function connectLiveSocket() {
+  const wsProtocol = API.startsWith("https") ? "wss" : "ws";
+  const wsBase = API.replace(/^https?/, wsProtocol);
+  liveSocket = new WebSocket(`${wsBase}/ws/live?token=${encodeURIComponent(TOKEN)}`);
+  const dot = document.getElementById("ws-dot");
+
+  liveSocket.onopen = () => { dot.style.background = "var(--accent)"; };
+  liveSocket.onclose = () => { dot.style.background = "var(--muted)"; };
+  liveSocket.onerror = () => { showToast("Live feed connection error"); };
+
+  liveSocket.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    const f = data.flow;
+    const badgeClass = f.predicted_label === "normal" ? "normal" : "high";
+    document.getElementById("live-latest").innerHTML = `
+      <strong>${new Date(f.created_at).toLocaleTimeString()}</strong>
+      &nbsp; ${f.source_ip}:${f.source_port} → ${f.dest_ip}:${f.dest_port}
+      &nbsp; <span class="badge ${badgeClass}">${f.predicted_label}</span>
+      &nbsp; confidence ${(f.confidence_score * 100).toFixed(0)}%
+      &nbsp; · predicted in <strong>${f.inference_time_ms.toFixed(2)} ms</strong>`;
+    if (data.alert) showToast(`New alert: ${data.alert.title}`);
+    // Keep the rest of the dashboard in sync without waiting for the next poll
+    loadStats();
+    loadTraffic();
+    if (data.alert) loadAlerts();
+  };
+}
+
+function disconnectLiveSocket() {
+  if (liveSocket) { liveSocket.close(); liveSocket = null; }
+}
+
+// ---------- Independent panel loaders (one failing never blocks the others) ----------
+
+async function refreshAll() {
+  await Promise.allSettled([
+    loadStats(),
+    loadCharts(),
+    loadTimeline(),
+    loadTopAttackers(),
+    loadAlerts(),
+    loadTraffic(),
+  ]);
+}
+
+async function loadStats() {
+  try {
+    const stats = await apiGet("/api/traffic/stats");
+    document.getElementById("stat-flows").textContent = stats.total_flows;
+    document.getElementById("stat-open").textContent = stats.open_alerts;
+    document.getElementById("stat-critical").textContent = stats.critical_alerts;
+    document.getElementById("stat-total").textContent = stats.total_alerts;
+    document.getElementById("stat-latency").textContent = stats.avg_inference_ms ? `${stats.avg_inference_ms.toFixed(1)} ms` : "–";
+    window._lastStats = stats;
+  } catch (err) { showToast("Stats: " + err.message); }
+}
+
+async function loadCharts() {
+  const errLabel = document.getElementById("labelChart-error");
+  const errProto = document.getElementById("protoChart-error");
+  errLabel.textContent = ""; errProto.textContent = "";
+  try {
+    const stats = window._lastStats || await apiGet("/api/traffic/stats");
+    if (typeof Chart === "undefined") throw new Error("Chart.js failed to load (check network/CDN access)");
+    renderChart("labelChart", stats.by_label, (c) => labelChart = c, labelChart, "bar");
+    renderChart("protoChart", stats.by_protocol, (c) => protoChart = c, protoChart, "doughnut");
+  } catch (err) {
+    errLabel.innerHTML = `<div class="chart-error">Chart unavailable: ${err.message}</div>`;
+    errProto.innerHTML = `<div class="chart-error">Chart unavailable: ${err.message}</div>`;
+  }
+}
+
+async function loadTimeline() {
+  const errBox = document.getElementById("timeline-error");
+  errBox.textContent = "";
+  try {
+    const tl = await apiGet("/api/traffic/timeline?minutes=15");
+    if (typeof Chart === "undefined") throw new Error("Chart.js failed to load");
+    const ctx = document.getElementById("timelineChart").getContext("2d");
+    if (timelineChart) {
+      timelineChart.data.labels = tl.labels;
+      timelineChart.data.datasets[0].data = tl.normal;
+      timelineChart.data.datasets[1].data = tl.malicious;
+      timelineChart.update();
+    } else {
+      timelineChart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: tl.labels,
+          datasets: [
+            { label: "Normal", data: tl.normal, borderColor: "#3fb950", backgroundColor: "#3fb95022", tension: 0.3, fill: true },
+            { label: "Malicious", data: tl.malicious, borderColor: "#f85149", backgroundColor: "#f8514922", tension: 0.3, fill: true },
+          ],
+        },
+        options: {
+          plugins: { legend: { labels: { color: "#e6edf3" } } },
+          scales: {
+            x: { ticks: { color: "#8b98a5" }, grid: { color: "#1a212b" } },
+            y: { ticks: { color: "#8b98a5" }, grid: { color: "#1a212b" }, beginAtZero: true },
+          },
+        },
+      });
+    }
+  } catch (err) {
+    errBox.innerHTML = `<div class="chart-error">Timeline unavailable: ${err.message}</div>`;
+  }
+}
+
+async function loadTopAttackers() {
+  const el = document.getElementById("top-attackers");
+  try {
+    const rows = await apiGet("/api/traffic/top-attackers?limit=5");
+    el.innerHTML = rows.length
+      ? rows.map(r => `<li><span>${r.source_ip}</span><span class="count">${r.alert_count}</span></li>`).join("")
+      : `<div class="empty">No attackers yet</div>`;
+  } catch (err) { el.innerHTML = `<div class="empty">Unavailable: ${err.message}</div>`; }
+}
+
+async function loadAlerts() {
+  const body = document.getElementById("alerts-body");
+  try {
+    const level = document.getElementById("alert-filter").value;
+    const qs = level ? `&threat_level=${level}` : "";
+    const alerts = await apiGet(`/api/alerts/?limit=15${qs}`);
+    body.innerHTML = alerts.length ? alerts.map(a => `
+      <tr>
+        <td>${new Date(a.detected_at).toLocaleTimeString()}</td>
+        <td><span class="badge ${a.threat_level}">${a.threat_level}</span></td>
+        <td>${a.attack_type || "-"}</td>
+        <td>${a.source_ip || "-"}</td>
+        <td>${a.title}</td>
+        <td>${a.is_resolved ? "resolved" : `<button class="danger-outline" onclick="resolveAlert('${a.alert_id}')">Resolve</button>`}</td>
+      </tr>`).join("") : `<tr><td colspan="6" class="empty">No alerts yet — try "Simulate traffic"</td></tr>`;
+  } catch (err) {
+    body.innerHTML = `<tr><td colspan="6" class="empty">Failed to load alerts: ${err.message}</td></tr>`;
+  }
+}
+
+async function loadTraffic() {
+  const body = document.getElementById("traffic-body");
+  try {
+    const label = document.getElementById("traffic-filter").value;
+    const search = document.getElementById("traffic-search").value.trim();
+    let qs = "limit=20";
+    if (label) qs += `&label=${label}`;
+    if (search) qs += `&search=${encodeURIComponent(search)}`;
+    const traffic = await apiGet(`/api/traffic/?${qs}`);
+    body.innerHTML = traffic.length ? traffic.map(t => `
+      <tr>
+        <td>${new Date(t.created_at).toLocaleTimeString()}</td>
+        <td>${t.source_ip}:${t.source_port}</td>
+        <td>${t.dest_ip}:${t.dest_port}</td>
+        <td>${t.protocol}</td>
+        <td>${Math.round(t.total_bytes).toLocaleString()}</td>
+        <td><span class="badge ${t.predicted_label === 'normal' ? 'normal' : 'high'}">${t.predicted_label}</span></td>
+        <td><span class="conf-bar"><span class="conf-bar-fill" style="width:${Math.round(t.confidence_score * 100)}%"></span></span>${(t.confidence_score * 100).toFixed(0)}%</td>
+      </tr>`).join("") : `<tr><td colspan="7" class="empty">No matching traffic — try "Simulate traffic" or clear filters</td></tr>`;
+  } catch (err) {
+    body.innerHTML = `<tr><td colspan="7" class="empty">Failed to load traffic: ${err.message}</td></tr>`;
+  }
+}
+
+function renderChart(canvasId, dataObj, setter, existing, type) {
+  const ctx = document.getElementById(canvasId).getContext("2d");
+  const labels = Object.keys(dataObj);
+  const values = Object.values(dataObj);
+  const colors = ["#3fb950", "#f85149", "#d29922", "#58a6ff", "#a371f7", "#f778ba"];
+  if (existing) { existing.data.labels = labels; existing.data.datasets[0].data = values; existing.update(); return; }
+  const chart = new Chart(ctx, {
+    type: type || "doughnut",
+    data: { labels, datasets: [{ data: values, backgroundColor: colors, borderRadius: type === "bar" ? 4 : 0 }] },
+    options: {
+      plugins: { legend: { display: type !== "bar", position: "bottom", labels: { color: "#e6edf3", boxWidth: 12 } } },
+      scales: type === "bar" ? {
+        x: { ticks: { color: "#8b98a5" }, grid: { display: false } },
+        y: { ticks: { color: "#8b98a5" }, grid: { color: "#1a212b" }, beginAtZero: true },
+      } : undefined,
+    },
+  });
+  setter(chart);
+}
+
+// Auto-login if a token is already stored
+if (TOKEN) { showApp(); }
+</script>
+</body>
+</html>

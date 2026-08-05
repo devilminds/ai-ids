@@ -1,0 +1,4 @@
+# Only needed if you're running app/packet_capture/sniffer.py locally
+# (requires root/admin + libpcap or npcap installed on your machine).
+scapy==2.6.1
+requests==2.32.3

@@ -1,0 +1,52 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: ai-ids-postgres
+    environment:
+      POSTGRES_DB: ai_ids_db
+      POSTGRES_USER: ai_ids_admin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ChangeMe123!}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai_ids_admin"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [ai-ids-network]
+
+  backend:
+    build: ./backend
+    container_name: ai-ids-backend
+    environment:
+      DATABASE_URL: postgresql://ai_ids_admin:${POSTGRES_PASSWORD:-ChangeMe123!}@postgres:5432/ai_ids_db
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-please-change-this-in-production}
+      CORS_ORIGINS: "*"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [ai-ids-network]
+    restart: unless-stopped
+
+  frontend:
+    image: nginx:alpine
+    container_name: ai-ids-frontend
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+    ports:
+      - "8080:80"
+    depends_on: [backend]
+    networks: [ai-ids-network]
+
+networks:
+  ai-ids-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
