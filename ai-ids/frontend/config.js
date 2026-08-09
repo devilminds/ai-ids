@@ -7,4 +7,4 @@
 window.API_BASE_URL =
   (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1" || window.location.hostname === "")
     ? "http://localhost:8000"
-    : "https://REPLACE-WITH-YOUR-BACKEND-URL.onrender.com";
+    : ":https://ai-ids-backend-0z72.onrender.com";
