@@ -21,7 +21,7 @@ import requests
 from scapy.all import sniff, IP, TCP, UDP
 
 FLUSH_INTERVAL = 5  # seconds
-API_BASE = "http://localhost:8000"
+API_BASE = "https://ai-ids-backend-0z72.onrender.com"
 
 _flows = defaultdict(lambda: {"packet_count": 0, "total_bytes": 0, "start": None, "end": None})
 _lock = threading.Lock()

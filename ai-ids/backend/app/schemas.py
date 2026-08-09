@@ -1,8 +1,19 @@
 """Pydantic schemas for request/response validation."""
-from datetime import datetime
-from typing import Optional
-from pydantic import BaseModel, ConfigDict, Field
+from datetime import datetime, timezone
+from typing import Optional, Annotated
+from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
 
+# Ensures every datetime we send to the frontend explicitly says "UTC" in
+# the JSON (e.g. "...+00:00"), so the browser's `new Date(...)` correctly
+# converts it to the viewer's local time instead of silently misreading a
+# naive UTC timestamp as if it were already local time.
+UTCDateTime = Annotated[
+    datetime,
+    PlainSerializer(
+        lambda dt: (dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)).isoformat(),
+        return_type=str,
+    ),
+]
 
 # ---------- Auth ----------
 
