@@ -12,4 +12,4 @@ envVars:
       - key: ADMIN_PASSWORD
         sync: false
       - key: CORS_ORIGINS
-        value: "*"
+        value: "https://ai-ids-khaki.vercel.app"
